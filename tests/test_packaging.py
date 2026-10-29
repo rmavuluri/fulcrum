@@ -72,3 +72,16 @@ def test_all_iam_templates_are_valid_json():
     }
     for f in files:
         assert json.loads(f.read_text())["Version"] == "2012-10-17"
+
+
+def test_no_package_source_redirects():
+    # The plugin directory blocks any registry/index/source redirect in a shipped pyproject.
+    for path in (PLUGIN / "pyproject.toml", PLUGIN.parents[1] / "pyproject.toml"):
+        uv = tomllib.loads(path.read_text()).get("tool", {}).get("uv", {})
+        assert not {"sources", "index", "index-url", "extra-index-url", "find-links"} & set(uv), path
+
+
+def test_dev_dependencies_match_runtime_pins():
+    runtime = tomllib.loads((PLUGIN / "pyproject.toml").read_text())["project"]["dependencies"]
+    dev = tomllib.loads((PLUGIN.parents[1] / "pyproject.toml").read_text())["project"]["dependencies"]
+    assert sorted(dev) == sorted(runtime)
