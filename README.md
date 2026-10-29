@@ -19,12 +19,13 @@ See the [plugin README](plugins/fulcrum/README.md) for prerequisites (uv, AWS cr
 ```
 .claude-plugin/marketplace.json   marketplace catalog (lists the fulcrum plugin)
 plugins/fulcrum/                  the plugin (manifest, skills, MCP server, IAM policy, docs)
+pyproject.toml, uv.lock, tests/   dev environment and tests (not shipped with the plugin)
 .github/workflows/ci.yml          lint + tests + plugin validation
 ```
 
 ## Releasing a new version
 
-1. Bump `version` in `plugins/fulcrum/.claude-plugin/plugin.json` and `plugins/fulcrum/server/pyproject.toml` (and `__version__` in `src/fulcrum_mcp/__init__.py`), following semver.
+1. Bump `version` in `plugins/fulcrum/.claude-plugin/plugin.json` and `plugins/fulcrum/pyproject.toml` (and `__version__` in `plugins/fulcrum/src/fulcrum_mcp/__init__.py`), then run `uv lock` in both `plugins/fulcrum` and the repository root, following semver.
 2. Add an entry to `plugins/fulcrum/CHANGELOG.md`.
 3. Merge to `main` and tag `fulcrum-vX.Y.Z`. Installed users get the update when the marketplace refreshes (`/plugin marketplace update fulcrum-marketplace`).
 

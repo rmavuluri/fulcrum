@@ -9,8 +9,7 @@ from pathlib import Path
 from fulcrum_mcp import __version__
 from fulcrum_mcp.server import mcp
 
-PLUGIN = Path(__file__).resolve().parents[2]
-SERVER = PLUGIN / "server"
+PLUGIN = Path(__file__).resolve().parents[1] / "plugins" / "fulcrum"
 PREFIX = "mcp__plugin_fulcrum_msk__"
 
 
@@ -20,7 +19,7 @@ def _tool_names() -> set[str]:
 
 def test_versions_match():
     manifest = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
-    pyproject = tomllib.loads((SERVER / "pyproject.toml").read_text())
+    pyproject = tomllib.loads((PLUGIN / "pyproject.toml").read_text())
     assert manifest["version"] == pyproject["project"]["version"] == __version__
     assert f"## [{__version__}]" in (PLUGIN / "CHANGELOG.md").read_text()
 
@@ -28,9 +27,10 @@ def test_versions_match():
 def test_mcp_json_uses_plugin_paths_and_declared_options():
     config = json.loads((PLUGIN / ".mcp.json").read_text())["mcpServers"]["msk"]
     manifest = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())
-    assert "${CLAUDE_PLUGIN_ROOT}/server" in config["args"]
+    assert "${CLAUDE_PLUGIN_ROOT}" in config["args"]
     assert "--frozen" in config["args"]
-    assert config["env"]["UV_PROJECT_ENVIRONMENT"].startswith("${CLAUDE_PLUGIN_DATA}")
+    # The plugin directory rejects env vars that look like package-index redirects.
+    assert not any(k.startswith(("UV_", "PIP_", "NPM_")) for k in config["env"])
     referenced = set(re.findall(r"\$\{user_config\.(\w+)\}", json.dumps(config)))
     assert referenced == set(manifest["userConfig"])
 
@@ -44,6 +44,15 @@ def test_skill_allowed_tools_match_server_tools():
         for mentioned in re.findall(r"`(\w+)`", text):
             if mentioned.startswith(("list_", "describe_", "get_", "diff_")):
                 assert mentioned in tools, f"{skill} mentions unknown tool {mentioned}"
+
+
+def test_runtime_lock_is_next_to_mcp_json_and_small():
+    lock = PLUGIN / "uv.lock"
+    assert lock.is_file()
+    # The plugin directory does not inspect files of 256 KiB or more.
+    assert lock.stat().st_size < 256 * 1024
+    pyproject = tomllib.loads((PLUGIN / "pyproject.toml").read_text())
+    assert "dependency-groups" not in pyproject
 
 
 def test_iam_policy_is_read_only():

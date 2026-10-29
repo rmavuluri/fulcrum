@@ -10,29 +10,34 @@ permissions:
 
 jobs:
   test:
-    name: Lint & test (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    name: Lint & test (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python: ["3.11", "3.12", "3.13"]
-    defaults:
-      run:
-        working-directory: plugins/fulcrum/server
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-glob: plugins/fulcrum/server/uv.lock
+          cache-dependency-glob: "**/uv.lock"
       - name: Install dependencies
         run: uv sync --frozen --python ${{ matrix.python }}
       - name: Ruff lint
-        run: uv run --frozen ruff check src tests
+        run: uv run --frozen ruff check plugins/fulcrum/src tests
       - name: Ruff format
-        run: uv run --frozen ruff format --check src tests
+        run: uv run --frozen ruff format --check plugins/fulcrum/src tests
       - name: Tests (coverage gate 80%)
         run: uv run --frozen pytest --cov-report=xml
+      - name: Runtime lock is current
+        run: uv lock --check --project plugins/fulcrum
+      - name: MCP server starts from the plugin's own lock
+        shell: bash
+        run: |
+          uv run --quiet --frozen --no-dev --project plugins/fulcrum --python ${{ matrix.python }} \
+            python -c "import confluent_kafka, fulcrum_mcp.server; print('ok', confluent_kafka.version())"
 
   validate:
     name: Validate plugin & marketplace
@@ -46,5 +51,7 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
       - name: Validate plugin
         run: claude plugin validate --strict ./plugins/fulcrum
+      - name: Directory pre-check
+        run: claude plugin validate --profile directory --strict ./plugins/fulcrum
       - name: Validate marketplace
         run: claude plugin validate --strict .

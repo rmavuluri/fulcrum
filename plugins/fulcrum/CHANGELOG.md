@@ -3,9 +3,21 @@
 All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/). The version in
-`.claude-plugin/plugin.json` and `server/pyproject.toml` must match the newest entry.
+`.claude-plugin/plugin.json` and `pyproject.toml` must match the newest entry.
 
 ## [Unreleased]
+
+## [0.2.1] - 2026-10-29
+
+### Changed
+
+- Packaging for the Claude plugin directory: the runtime `pyproject.toml` and `uv.lock` now sit
+  next to `.mcp.json`, and the lock holds runtime dependencies only (dev tools and tests moved to
+  the repository root, outside the plugin).
+- The server's virtual environment now lives in the plugin folder (`.venv`) instead of the plugin
+  data folder; it is rebuilt automatically on first start after updating.
+- README: install uv with a package manager instead of a download-and-run script.
+- CI now runs the tests on Linux, macOS and Windows.
 
 ## [0.2.0] - 2026-10-28
 
@@ -49,6 +61,7 @@ All notable changes to this plugin are documented here. The format follows
 - Least-privilege IAM policy, unit tests (moto, botocore Stubber, fake AdminClient) and an optional
   live integration test.
 
-[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.2.0...HEAD
+[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.2.1...HEAD
+[0.2.1]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.1
 [0.2.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.0
 [0.1.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.1.0

@@ -8,11 +8,10 @@
         "--frozen",
         "--no-dev",
         "--project",
-        "${CLAUDE_PLUGIN_ROOT}/server",
+        "${CLAUDE_PLUGIN_ROOT}",
         "fulcrum-mcp"
       ],
       "env": {
-        "UV_PROJECT_ENVIRONMENT": "${CLAUDE_PLUGIN_DATA}/venv",
         "FULCRUM_OPT_AWS_REGION": "${user_config.aws_region}",
         "FULCRUM_OPT_AWS_PROFILE": "${user_config.aws_profile}",
         "FULCRUM_OPT_IAM_ROLE_ARN": "${user_config.iam_role_arn}",

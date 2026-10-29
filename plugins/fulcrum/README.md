@@ -40,14 +40,15 @@ Have these ready, or ask your AWS administrator or platform team:
 
 Fulcrum's server is written in Python. `uv` downloads Python and everything else it needs automatically.
 
-```bash
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# or on macOS: brew install uv
+Fulcrum works on macOS, Linux and Windows. Install uv with your package manager:
 
-# Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```bash
+brew install uv            # macOS (Homebrew)
+winget install astral-sh.uv  # Windows
+pipx install uv            # Linux, or anywhere with Python and pipx
 ```
+
+For other options, see the [official uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
 
 Check it worked: `uv --version` prints a version number. Open a new terminal if it says "command not found".
 
@@ -758,9 +759,9 @@ claude --plugin-dir ./plugins/fulcrum         # load the plugin without installi
 claude plugin validate ./plugins/fulcrum      # validate the plugin
 claude plugin validate .                      # validate the marketplace
 
-cd plugins/fulcrum/server
+# from the repository root
 uv sync                                       # dev environment
-uv run ruff check src tests && uv run ruff format --check src tests
+uv run ruff check plugins/fulcrum/src tests && uv run ruff format --check plugins/fulcrum/src tests
 uv run pytest                                 # unit tests, coverage gate 80%
 
 # optional live test, against your real account and cluster
@@ -776,7 +777,8 @@ plugins/fulcrum/
 ├── skills/fulcrum/SKILL.md         /fulcrum subcommand router
 ├── skills/kafka-insights/SKILL.md  natural-language guidance
 ├── iam/fulcrum-readonly-policy.json
-└── server/                         Python MCP server (src/fulcrum_mcp, tests)
+├── pyproject.toml, uv.lock        runtime dependencies (pinned, hashed)
+└── src/fulcrum_mcp/                Python MCP server
 ```
 
 ## License
