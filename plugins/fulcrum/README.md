@@ -749,7 +749,12 @@ Start with `/fulcrum status`. It shows the resolved config and checks credential
 - **Input validation.** Topic, group, schema, registry, prefix and ARN inputs are checked against strict patterns before they reach any API.
 - **Least privilege.** The bundled policy grants only the actions listed above, scoped to your cluster where AWS supports it.
 - **Runs locally.** Data goes from AWS to your machine and into your Claude Code session. Treat topic names, hosts and schema definitions accordingly.
-- **Pinned dependencies.** Every Python dependency is pinned in `server/uv.lock`, and the server runs with `uv run --frozen`.
+- **Pinned dependencies.** Every Python dependency is pinned in `uv.lock`, and the server runs with `uv run --frozen`.
+
+## Privacy
+
+Fulcrum runs on your machine, reads only metadata from your own AWS account, never reads message
+contents and sends nothing to anyone but AWS. See [PRIVACY.md](PRIVACY.md).
 
 ## Development
 

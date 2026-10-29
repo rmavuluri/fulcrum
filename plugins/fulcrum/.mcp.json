@@ -9,7 +9,8 @@
         "--no-dev",
         "--project",
         "${CLAUDE_PLUGIN_ROOT}",
-        "fulcrum-mcp"
+        "python",
+        "${CLAUDE_PLUGIN_ROOT}/fulcrum_server.py"
       ],
       "env": {
         "FULCRUM_OPT_AWS_REGION": "${user_config.aws_region}",

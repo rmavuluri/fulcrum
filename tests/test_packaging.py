@@ -85,3 +85,16 @@ def test_dev_dependencies_match_runtime_pins():
     runtime = tomllib.loads((PLUGIN / "pyproject.toml").read_text())["project"]["dependencies"]
     dev = tomllib.loads((PLUGIN.parents[1] / "pyproject.toml").read_text())["project"]["dependencies"]
     assert sorted(dev) == sorted(runtime)
+
+
+def test_mcp_json_runs_a_readable_file_in_the_plugin():
+    # The directory's validator must be able to follow the command to a file it can read.
+    args = json.loads((PLUGIN / ".mcp.json").read_text())["mcpServers"]["msk"]["args"]
+    script = args[-1]
+    assert script.startswith("${CLAUDE_PLUGIN_ROOT}/") and script.endswith(".py")
+    assert "from fulcrum_mcp.server import main" in (PLUGIN / script.split("/", 1)[1]).read_text()
+
+
+def test_privacy_policy_is_shipped_and_linked():
+    assert "# Fulcrum privacy policy" in (PLUGIN / "PRIVACY.md").read_text()
+    assert "(PRIVACY.md)" in (PLUGIN / "README.md").read_text()

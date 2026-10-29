@@ -7,6 +7,17 @@ All notable changes to this plugin are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-29
+
+### Added
+
+- `PRIVACY.md`: what the plugin reads, where data goes, and how long it is kept.
+
+### Changed
+
+- `.mcp.json` now runs `fulcrum_server.py` from the plugin folder instead of the `fulcrum-mcp`
+  console script, so the directory's validator can read the server's entry point.
+
 ## [0.2.1] - 2026-10-29
 
 ### Changed
@@ -61,7 +72,8 @@ All notable changes to this plugin are documented here. The format follows
 - Least-privilege IAM policy, unit tests (moto, botocore Stubber, fake AdminClient) and an optional
   live integration test.
 
-[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.2.1...HEAD
+[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.2.2...HEAD
+[0.2.2]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.2
 [0.2.1]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.1
 [0.2.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.0
 [0.1.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.1.0
