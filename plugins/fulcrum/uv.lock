@@ -296,8 +296,8 @@ wheels = [
 
 [[package]]
 name = "fulcrum-mcp"
-version = "0.2.2"
-source = { editable = "." }
+version = "0.2.3"
+source = { virtual = "." }
 dependencies = [
     { name = "aws-msk-iam-sasl-signer-python" },
     { name = "boto3" },

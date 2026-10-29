@@ -33,11 +33,10 @@ jobs:
         run: uv run --frozen pytest --cov-report=xml
       - name: Runtime lock is current
         run: uv lock --check --project plugins/fulcrum
-      - name: MCP server starts from the plugin's own lock
-        shell: bash
-        run: |
-          uv run --quiet --frozen --no-dev --project plugins/fulcrum --python ${{ matrix.python }} \
-            python -c "import confluent_kafka, fulcrum_mcp.server; print('ok', confluent_kafka.version())"
+      - name: MCP server starts from the plugin's own lock (the .mcp.json command)
+        run: uv run --frozen python tests/mcp_smoke.py
+        env:
+          UV_PYTHON: ${{ matrix.python }}
 
   validate:
     name: Validate plugin & marketplace

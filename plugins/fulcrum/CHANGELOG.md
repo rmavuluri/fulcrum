@@ -7,6 +7,14 @@ All notable changes to this plugin are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-29
+
+### Changed
+
+- The plugin is no longer built as a Python package on install: `pyproject.toml` has no build
+  system, so `uv run` only installs the locked dependencies and no build backend is downloaded
+  or run. `fulcrum_server.py` adds `src/` to the import path itself.
+
 ## [0.2.2] - 2026-10-29
 
 ### Added
@@ -72,7 +80,8 @@ All notable changes to this plugin are documented here. The format follows
 - Least-privilege IAM policy, unit tests (moto, botocore Stubber, fake AdminClient) and an optional
   live integration test.
 
-[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.2.2...HEAD
+[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.2.3...HEAD
+[0.2.3]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.3
 [0.2.2]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.2
 [0.2.1]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.1
 [0.2.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.0

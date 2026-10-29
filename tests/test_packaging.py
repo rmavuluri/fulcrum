@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import sys
 import tomllib
 from pathlib import Path
 
@@ -98,3 +99,18 @@ def test_mcp_json_runs_a_readable_file_in_the_plugin():
 def test_privacy_policy_is_shipped_and_linked():
     assert "# Fulcrum privacy policy" in (PLUGIN / "PRIVACY.md").read_text(encoding="utf-8")
     assert "(PRIVACY.md)" in (PLUGIN / "README.md").read_text(encoding="utf-8")
+
+
+def test_launcher_starts_the_server_without_installing_the_plugin():
+    from tests.mcp_smoke import handshake
+
+    info, count = handshake([sys.executable, "-I", str(PLUGIN / "fulcrum_server.py")])
+    assert info["version"] == __version__
+    assert count == len(_tool_names())
+
+
+def test_plugin_is_not_built_as_a_package():
+    # No build backend may run at install time; uv treats a project without [build-system] as virtual.
+    pyproject = tomllib.loads((PLUGIN / "pyproject.toml").read_text(encoding="utf-8"))
+    assert "build-system" not in pyproject
+    assert 'source = { virtual = "." }' in (PLUGIN / "uv.lock").read_text(encoding="utf-8")
