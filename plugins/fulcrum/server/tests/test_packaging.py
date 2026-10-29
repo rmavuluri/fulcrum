@@ -52,3 +52,14 @@ def test_iam_policy_is_read_only():
     verbs = ("List", "Describe", "Get", "Connect")
     assert all(a.split(":")[1].startswith(verbs) for a in actions), actions
     assert all(s["Effect"] == "Allow" for s in policy["Statement"])
+
+
+def test_all_iam_templates_are_valid_json():
+    files = sorted((PLUGIN / "iam").glob("*.json"))
+    assert {f.name for f in files} >= {
+        "fulcrum-readonly-policy.json",
+        "fulcrum-role-trust-policy.json",
+        "fulcrum-assume-role-policy.json",
+    }
+    for f in files:
+        assert json.loads(f.read_text())["Version"] == "2012-10-17"

@@ -34,7 +34,14 @@ def test_client_config_and_single_instance(fake_admin_client):
     assert conf["security.protocol"] == "SASL_SSL"
     assert conf["sasl.mechanism"] == "OAUTHBEARER"
     assert callable(conf["oauth_cb"])
+    assert conf["log_level"] == 2 and conf["reconnect.backoff.ms"] >= 1000
     assert fake_admin_client.polled
+    debug_conf = []
+    debug_admin = KafkaAdmin(
+        "b:1", lambda _c: ("t", 0.0), admin_factory=lambda c: debug_conf.append(c) or fake_admin_client, debug=True
+    )
+    assert debug_admin.client is fake_admin_client
+    assert debug_conf[0]["log_level"] == 7
 
 
 def test_only_read_only_admin_calls(kafka_admin, fake_admin_client):

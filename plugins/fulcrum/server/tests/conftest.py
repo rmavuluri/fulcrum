@@ -280,7 +280,7 @@ def service_factory(session: FakeSession, kafka_admin: KafkaAdmin):
         return FulcrumService(
             make_settings(**overrides),
             session_factory=lambda **_kw: session,
-            admin_factory=lambda bootstrap, cb, timeout: kafka_admin,
+            admin_factory=lambda bootstrap, cb, timeout, debug=False: kafka_admin,
             clock=lambda: CLOCK,
         )
 

@@ -79,3 +79,51 @@ def validate_page(limit: int, offset: int, max_limit: int = 1000) -> tuple[int, 
     if offset < 0:
         raise InputValidationError("offset must be >= 0.")
     return limit, offset
+
+
+_HOST_RE = re.compile(
+    r"^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*$"
+)
+_ROLE_ARN_RE = re.compile(r"^arn:aws[a-z-]*:iam::\d{12}:role/[\w+=,.@/-]{1,512}$")
+_EXTERNAL_ID_RE = re.compile(r"^[\w+=,.@:/-]{2,1224}$")
+_MSK_HOST_REGION_RE = re.compile(r"\.kafka(?:-serverless)?\.([a-z]{2}(?:-[a-z]+)+-\d)\.amazonaws\.com(?:\.cn)?$")
+
+
+def validate_bootstrap_brokers(value: str) -> str:
+    """Validate a comma-separated ``host:port`` list, e.g. the SASL/IAM bootstrap string."""
+    entries = [e.strip() for e in (value or "").split(",") if e.strip()]
+    if not entries or len(entries) > 30:
+        raise InputValidationError("Bootstrap brokers must be 1-30 comma-separated `host:port` entries.")
+    for entry in entries:
+        host, sep, port = entry.rpartition(":")
+        if not sep or not _HOST_RE.match(host) or not port.isdigit() or not 0 < int(port) < 65536:
+            raise InputValidationError(
+                f"{entry!r} is not a valid broker address (expected host:port, "
+                "e.g. b-1.mycluster.abc123.c2.kafka.us-east-1.amazonaws.com:9098)."
+            )
+    return ",".join(entries)
+
+
+def region_from_bootstrap(value: str) -> str | None:
+    """Infer the AWS region from MSK broker hostnames (``...kafka.<region>.amazonaws.com``)."""
+    for entry in value.split(","):
+        match = _MSK_HOST_REGION_RE.search(entry.rpartition(":")[0])
+        if match:
+            return match.group(1)
+    return None
+
+
+def validate_role_arn(arn: str) -> str:
+    arn = (arn or "").strip()
+    if not _ROLE_ARN_RE.match(arn):
+        raise InputValidationError(
+            f"{arn!r} is not a valid IAM role ARN (expected arn:aws:iam::<account>:role/<name>)."
+        )
+    return arn
+
+
+def validate_external_id(value: str) -> str:
+    value = (value or "").strip()
+    if not _EXTERNAL_ID_RE.match(value):
+        raise InputValidationError("The external ID must be 2-1224 characters of letters, digits and +=,.@:/-_.")
+    return value

@@ -6,9 +6,11 @@ import json
 import logging
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 import boto3
+from aws_msk_iam_sasl_signer import MSKAuthTokenProvider
 from botocore.config import Config
 from botocore.exceptions import ProfileNotFound
 
@@ -16,6 +18,7 @@ from . import __version__
 from .auth import MskIamTokenProvider
 from .cache import TTLCache
 from .config import Settings
+from .credentials import SessionCredentialProvider, build_session
 from .diff import diff_schemas
 from .errors import ConfigError, FulcrumError, InputValidationError, translate_aws_error
 from .formatting import document, human_bytes, kv_table, now_utc, paginate, table
@@ -47,6 +50,18 @@ PRODUCER_LIMITATION = (
 VALID_GROUP_STATES = {"STABLE", "EMPTY", "DEAD", "PREPARING_REBALANCING", "COMPLETING_REBALANCING", "UNKNOWN"}
 
 
+@dataclass(frozen=True)
+class KafkaTarget:
+    """Which brokers to talk to. ``bootstrap`` is set when the user gave broker endpoints directly;
+    otherwise it is looked up from ``arn`` with kafka:GetBootstrapBrokers. ``arn`` is optional in
+    direct mode and only enables the MSK-API extras (cluster state, CloudWatch metrics)."""
+
+    key: str
+    region: str
+    arn: str | None = None
+    bootstrap: str | None = None
+
+
 class FulcrumService:
     def __init__(
         self,
@@ -74,10 +89,7 @@ class FulcrumService:
             try:
                 session = self._session_factory(profile_name=self.settings.profile)
             except ProfileNotFound as exc:
-                raise ConfigError(
-                    f"AWS profile `{self.settings.profile}` was not found in your AWS config files.",
-                    hint="Check `aws configure list-profiles`, then fix AWS_PROFILE or the `aws_profile` option.",
-                ) from exc
+                raise self._profile_error() from exc
             self._default_region = getattr(session, "region_name", None) or ""
         return self._default_region or None
 
@@ -92,14 +104,35 @@ class FulcrumService:
             )
         return region
 
+    def _session(self, region: str) -> Any:
+        """Session for ``region``: the base credentials, or the configured IAM role assumed from them.
+        Callers hold ``self._lock`` or tolerate a duplicate session being built."""
+        session = self._sessions.get(region)
+        if session is None:
+            try:
+                session = build_session(
+                    self.settings.profile,
+                    region,
+                    self.settings.role_arn,
+                    self.settings.role_external_id,
+                    session_factory=self._session_factory,
+                )
+            except ProfileNotFound as exc:
+                raise self._profile_error() from exc
+            self._sessions[region] = session
+        return session
+
+    def _profile_error(self) -> ConfigError:
+        return ConfigError(
+            f"AWS profile `{self.settings.profile}` was not found in your AWS config files.",
+            hint="Check `aws configure list-profiles`, then fix AWS_PROFILE or the `aws_profile` option.",
+        )
+
     def _client(self, service: str, region: str) -> Any:
         key = (service, region)
         with self._lock:
             if key not in self._clients:
-                session = self._sessions.get(region)
-                if session is None:
-                    session = self._session_factory(profile_name=self.settings.profile, region_name=region)
-                    self._sessions[region] = session
+                session = self._session(region)
                 cfg = Config(
                     region_name=region,
                     connect_timeout=min(10, self.settings.timeout),
@@ -154,17 +187,47 @@ class FulcrumService:
             ),
         )
 
-    def admin(self, arn: str) -> KafkaAdmin:
+    def _target(self, override: str | None) -> KafkaTarget:
+        """Pick the Kafka cluster for a command: an explicit ``cluster=<arn>``, else the configured
+        bootstrap brokers, else the configured (or only) cluster ARN."""
+        if override:
+            arn = validate_cluster_arn(override)
+            return KafkaTarget(key=arn, region=self._region(arn), arn=arn)
+        if self.settings.bootstrap_brokers:
+            arn = self.settings.cluster_arn
+            region = self._region(arn) if arn else self._region()
+            return KafkaTarget(
+                key=f"brokers:{self.settings.bootstrap_brokers}",
+                region=region,
+                arn=arn,
+                bootstrap=self.settings.bootstrap_brokers,
+            )
+        arn = self.resolve_cluster(None)
+        return KafkaTarget(key=arn, region=self._region(arn), arn=arn)
+
+    def admin(self, target: KafkaTarget) -> KafkaAdmin:
         with self._lock:
-            existing = self._admins.get(arn)
+            existing = self._admins.get(target.key)
         if existing is not None:
             return existing
-        region = self._region(arn)
-        bootstrap = self.msk(region).iam_bootstrap(arn)
-        provider = MskIamTokenProvider(region, self.settings.profile)
-        created = self._admin_factory(bootstrap, provider, self.settings.timeout)
+        bootstrap = target.bootstrap or self.msk(target.region).iam_bootstrap(target.arn or "")
+        provider = self._token_provider(target.region)
+        created = self._admin_factory(
+            bootstrap, provider, self.settings.timeout, debug=self.settings.log_level == "DEBUG"
+        )
         with self._lock:
-            return self._admins.setdefault(arn, created)
+            return self._admins.setdefault(target.key, created)
+
+    def _token_provider(self, region: str) -> MskIamTokenProvider:
+        """MSK IAM tokens signed with the same (possibly role-assumed) credentials as the AWS calls."""
+        with self._lock:
+            session = self._session(region)
+        credentials = SessionCredentialProvider(session)
+        return MskIamTokenProvider(
+            region,
+            self.settings.profile,
+            token_fn=lambda: MSKAuthTokenProvider.generate_auth_token_from_credentials_provider(region, credentials),
+        )
 
     def _cluster_info(self, arn: str) -> ClusterInfo:
         return self.msk(self._region(arn)).describe_cluster(arn)
@@ -177,7 +240,13 @@ class FulcrumService:
             ("Fulcrum version", __version__),
             ("AWS region", s.region or "not set"),
             ("AWS profile", s.profile or "default credential chain"),
-            ("MSK cluster ARN", s.cluster_arn or "not set (auto-select if exactly one cluster)"),
+            ("IAM role", s.role_arn or "not set (use base credentials directly)"),
+            ("Bootstrap brokers", s.bootstrap_brokers or "not set (looked up from the cluster ARN)"),
+            (
+                "MSK cluster ARN",
+                s.cluster_arn
+                or ("not set (optional with bootstrap brokers)" if s.bootstrap_brokers else "not set (auto-select)"),
+            ),
             ("Glue registry", s.registry_name or "all registries"),
             ("Lag threshold", s.lag_threshold),
             ("Cache TTL (s)", s.cache_ttl),
@@ -195,17 +264,21 @@ class FulcrumService:
             )
         if not s.region:
             rows[1] = ("AWS region", f"{region} (from AWS profile config)")
+        identity_check = "IAM role assumed" if s.role_arn else "AWS credentials"
         try:
             ident = self._client("sts", region).get_caller_identity()
-            checks.append(("AWS credentials", "ok", ident.get("Arn", "")))
+            checks.append((identity_check, "ok", ident.get("Arn", "")))
         except Exception as exc:
             err = translate_aws_error(exc, "sts:GetCallerIdentity")
-            checks.append(("AWS credentials", "failed", err.message))
+            checks.append((identity_check, "failed", err.message))
         else:
             try:
-                arn = self.resolve_cluster(None)
-                checks.append(("MSK cluster", "ok", arn))
-                broker_count = len(self.admin(arn).broker_ids())
+                target = self._target(None)
+                if target.bootstrap:
+                    checks.append(("Kafka endpoint", "ok", f"{len(target.bootstrap.split(','))} bootstrap brokers"))
+                else:
+                    checks.append(("MSK cluster", "ok", target.arn or ""))
+                broker_count = len(self.admin(target).broker_ids())
                 checks.append(("Kafka brokers (IAM)", "ok", f"{broker_count} brokers reachable"))
             except FulcrumError as err:
                 checks.append(("MSK / Kafka connectivity", "failed", err.message))
@@ -225,7 +298,10 @@ class FulcrumService:
         )
 
     def cluster(self, cluster: str | None) -> str:
-        arn = self.resolve_cluster(cluster)
+        target = self._target(cluster)
+        if not target.arn:
+            return self._cluster_from_brokers(target)
+        arn = target.arn
         info, stamp = self._cached(("cluster", arn), lambda: self._cluster_info(arn))
         rows = [
             ("Name", info.name),
@@ -246,6 +322,24 @@ class FulcrumService:
         )
         return self._doc(f"Cluster `{info.name}`", [kv_table(rows), "### Bootstrap endpoints", endpoints], stamp)
 
+    def _cluster_from_brokers(self, target: KafkaTarget) -> str:
+        """Cluster view straight from the brokers, for direct-endpoint mode without a cluster ARN."""
+        info, stamp = self._cached(("cluster-kafka", target.key), lambda: self.admin(target).describe_cluster())
+        rows = [
+            ("Kafka cluster id", info["cluster_id"]),
+            ("Region", target.region),
+            ("Broker count", len(info["brokers"])),
+            ("Controller broker", info["controller"]),
+            ("Client auth", "SASL/IAM (configured bootstrap brokers)"),
+            ("Bootstrap brokers", target.bootstrap),
+        ]
+        brokers = table(["Broker id", "Host", "Port", "Rack / AZ"], info["brokers"])
+        note = (
+            "_Kafka version, broker type, state and MSK endpoints come from the MSK API. Set the plugin's "
+            "`msk_cluster_arn` option (needs `kafka:DescribeClusterV2`) to include them._"
+        )
+        return self._doc("Kafka cluster (via bootstrap brokers)", [kv_table(rows), "### Brokers", brokers, note], stamp)
+
     # -- topics -----------------------------------------------------------------------------
 
     def topics(
@@ -258,8 +352,8 @@ class FulcrumService:
     ) -> str:
         prefix = validate_prefix(prefix)
         limit, offset = validate_page(limit or self.settings.max_rows, offset)
-        arn = self.resolve_cluster(cluster)
-        all_topics, stamp = self._cached(("topics", arn), lambda: self.admin(arn).list_topics())
+        target = self._target(cluster)
+        all_topics, stamp = self._cached(("topics", target.key), lambda: self.admin(target).list_topics())
         internal_count = sum(1 for t in all_topics if t.internal)
         selected = [
             t for t in all_topics if (include_internal or not t.internal) and (not prefix or t.name.startswith(prefix))
@@ -278,8 +372,8 @@ class FulcrumService:
 
     def topic(self, name: str, cluster: str | None) -> str:
         name = validate_topic(name)
-        arn = self.resolve_cluster(cluster)
-        detail, stamp = self._cached(("topic", arn, name), lambda: self.admin(arn).describe_topic(name))
+        target = self._target(cluster)
+        detail, stamp = self._cached(("topic", target.key, name), lambda: self.admin(target).describe_topic(name))
         parts = detail.partitions
         messages = [
             p.latest_offset - p.earliest_offset
@@ -333,8 +427,8 @@ class FulcrumService:
         wanted = state.strip().upper() if state else None
         if wanted and wanted not in VALID_GROUP_STATES:
             raise InputValidationError(f"state must be one of {', '.join(sorted(VALID_GROUP_STATES))}.")
-        arn = self.resolve_cluster(cluster)
-        groups, stamp = self._cached(("groups", arn), lambda: self.admin(arn).list_groups())
+        target = self._target(cluster)
+        groups, stamp = self._cached(("groups", target.key), lambda: self.admin(target).list_groups())
         selected = [
             g for g in groups if (not prefix or g.group_id.startswith(prefix)) and (not wanted or g.state == wanted)
         ]
@@ -352,8 +446,10 @@ class FulcrumService:
 
     def group(self, group_id: str, cluster: str | None) -> str:
         group_id = validate_group_id(group_id)
-        arn = self.resolve_cluster(cluster)
-        detail, stamp = self._cached(("group", arn, group_id), lambda: self.admin(arn).describe_group(group_id))
+        target = self._target(cluster)
+        detail, stamp = self._cached(
+            ("group", target.key, group_id), lambda: self.admin(target).describe_group(group_id)
+        )
         lagging = [p for p in detail.partitions if (p.lag or 0) > 0]
         summary = kv_table(
             [
@@ -388,8 +484,8 @@ class FulcrumService:
     def consumers(self, group_prefix: str | None, limit: int | None, offset: int, cluster: str | None) -> str:
         group_prefix = validate_prefix(group_prefix)
         limit, offset = validate_page(limit or self.settings.max_rows, offset)
-        arn = self.resolve_cluster(cluster)
-        clients, stamp = self._cached(("consumers", arn), lambda: self.admin(arn).list_consumers())
+        target = self._target(cluster)
+        clients, stamp = self._cached(("consumers", target.key), lambda: self.admin(target).list_consumers())
         selected = [c for c in clients if not group_prefix or c.group_id.startswith(group_prefix)]
         hosts = {c.host for c in selected}
         groups = {c.group_id for c in selected}
@@ -410,20 +506,27 @@ class FulcrumService:
         topic_prefix = validate_prefix(topic_prefix)
         if minutes < 1 or minutes > 1440:
             raise InputValidationError("minutes must be between 1 and 1440.")
-        arn = self.resolve_cluster(cluster)
-        info, _ = self._cached(("cluster", arn), lambda: self._cluster_info(arn))
-        admin = self.admin(arn)
-        topics, _ = self._cached(("topics", arn), admin.list_topics)
+        target = self._target(cluster)
+        admin = self.admin(target)
+        topics, _ = self._cached(("topics", target.key), admin.list_topics)
         names = [t.name for t in topics if not t.internal and (not topic_prefix or t.name.startswith(topic_prefix))]
-        broker_ids = None if info.cluster_type == "SERVERLESS" else admin.broker_ids()
 
         sections = [PRODUCER_LIMITATION]
         stamp = self._clock()
-        try:
-            throughput = self.metrics(self._region(arn)).topic_throughput(info.name, names, broker_ids, minutes)
-        except FulcrumError as err:
-            sections.append(f"CloudWatch metrics unavailable: {err.render()}")
-            throughput = {}
+        throughput: dict[str, Any] = {}
+        if target.arn is None:
+            sections.append(
+                "CloudWatch metrics need the cluster name, which comes from the MSK API. Set the plugin's "
+                "`msk_cluster_arn` option alongside the bootstrap brokers to see per-topic ingress."
+            )
+        else:
+            arn = target.arn
+            try:
+                info, _ = self._cached(("cluster", arn), lambda: self._cluster_info(arn))
+                broker_ids = None if info.cluster_type == "SERVERLESS" else admin.broker_ids()
+                throughput = self.metrics(target.region).topic_throughput(info.name, names, broker_ids, minutes)
+            except FulcrumError as err:
+                sections.append(f"CloudWatch metrics unavailable: {err.render()}")
         if throughput:
             active = sorted(
                 (t for t in throughput.values() if (t.messages_in_per_sec or 0) > 0 or (t.bytes_in_per_sec or 0) > 0),
@@ -460,9 +563,9 @@ class FulcrumService:
         threshold = self.settings.lag_threshold if lag_threshold is None else lag_threshold
         if threshold < 0:
             raise InputValidationError("lag_threshold must be >= 0.")
-        arn = self.resolve_cluster(cluster)
-        info = self._cluster_info(arn)
-        admin = self.admin(arn)
+        target = self._target(cluster)
+        info = self._cluster_info(target.arn) if target.arn else None
+        admin = self.admin(target)
         partitions = admin.partition_health()
         lags = admin.group_lags()
         stamp = self._clock()
@@ -470,12 +573,16 @@ class FulcrumService:
         urp = [(t, p) for t, p in partitions if p.under_replicated and not p.offline]
         offline = [(t, p) for t, p in partitions if p.offline]
         lagging = [g for g in lags if g.total_lag > threshold]
-        problems = (info.state != "ACTIVE") + bool(urp) + bool(offline) + bool(lagging)
+        state = info.state if info else None
+        problems = (state not in (None, "ACTIVE")) + bool(urp) + bool(offline) + bool(lagging)
         verdict = "✅ **Healthy**" if problems == 0 else f"⚠️ **{problems} issue type(s) found**"
 
         summary = kv_table(
             [
-                ("Cluster state", info.state + ("" if info.state == "ACTIVE" else " ⚠️")),
+                (
+                    "Cluster state",
+                    "n/a (no cluster ARN configured)" if state is None else state + ("" if state == "ACTIVE" else " ⚠️"),
+                ),
                 ("Partitions checked", len(partitions)),
                 ("Under-replicated partitions", len(urp)),
                 ("Offline partitions", len(offline)),
@@ -509,7 +616,8 @@ class FulcrumService:
                 ),
                 footer,
             ]
-        return self._doc(f"Health of `{info.name}`", sections, stamp)
+        title = f"Health of `{info.name}`" if info else "Health (via bootstrap brokers)"
+        return self._doc(title, sections, stamp)
 
     # -- schemas ----------------------------------------------------------------------------
 

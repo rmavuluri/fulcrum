@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "fulcrum",
   "displayName": "Fulcrum",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Query Amazon MSK (Kafka) clusters and AWS Glue Schema Registry from Claude Code using IAM auth: topics, consumer groups and lag, consumers, schemas and diffs, cluster health. Read-only.",
   "author": {
     "name": "rmavuluri"
@@ -10,7 +10,16 @@
   "homepage": "https://github.com/rmavuluri/fulcrum/tree/main/plugins/fulcrum",
   "repository": "https://github.com/rmavuluri/fulcrum",
   "license": "MIT",
-  "keywords": ["kafka", "msk", "aws", "glue", "schema-registry", "iam", "consumer-lag", "mcp"],
+  "keywords": [
+    "kafka",
+    "msk",
+    "aws",
+    "glue",
+    "schema-registry",
+    "iam",
+    "consumer-lag",
+    "mcp"
+  ],
   "userConfig": {
     "aws_region": {
       "type": "string",
@@ -24,10 +33,28 @@
       "description": "Named profile from ~/.aws/config (SSO profiles work). Leave empty to use AWS_PROFILE or the default credential chain. Fulcrum never stores credentials.",
       "default": ""
     },
+    "iam_role_arn": {
+      "type": "string",
+      "title": "IAM role ARN",
+      "description": "Role to assume for MSK, Glue and CloudWatch access, e.g. arn:aws:iam::123456789012:role/FulcrumReadOnly. Your base credentials (profile/SSO/keys) are used only to assume it. Leave empty to use your credentials directly.",
+      "default": ""
+    },
+    "iam_role_external_id": {
+      "type": "string",
+      "title": "IAM role external ID",
+      "description": "Only if the role's trust policy requires an external ID. Leave empty otherwise.",
+      "default": ""
+    },
+    "bootstrap_brokers": {
+      "type": "string",
+      "title": "MSK bootstrap brokers",
+      "description": "SASL/IAM broker endpoint(s), comma-separated host:port, e.g. b-1.mycluster.abc123.c2.kafka.us-east-1.amazonaws.com:9098. When set, Fulcrum connects to these brokers directly and the cluster ARN becomes optional.",
+      "default": ""
+    },
     "msk_cluster_arn": {
       "type": "string",
       "title": "MSK cluster ARN",
-      "description": "Cluster to query. Leave empty to use MSK_CLUSTER_ARN, or to auto-select when the region has exactly one cluster.",
+      "description": "Cluster to query. Optional when bootstrap brokers are set (adds cluster state, version and CloudWatch metrics). Leave empty to use MSK_CLUSTER_ARN, or to auto-select when the region has exactly one cluster.",
       "default": ""
     },
     "glue_registry_name": {

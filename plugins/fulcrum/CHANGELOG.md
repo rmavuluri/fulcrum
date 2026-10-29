@@ -7,6 +7,26 @@ All notable changes to this plugin are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-28
+
+### Added
+
+- **Direct broker endpoint:** new `bootstrap_brokers` option (env `MSK_BOOTSTRAP_BROKERS`). Fulcrum
+  connects to the given SASL/IAM brokers with no MSK API lookup, so no cluster ARN or
+  `kafka:GetBootstrapBrokers` permission is needed. The region is inferred from MSK hostnames.
+  `cluster` and `health` work from broker data alone; adding the cluster ARN restores MSK state,
+  version and CloudWatch producer metrics.
+- **IAM role assumption:** new `iam_role_arn` and `iam_role_external_id` options (env
+  `FULCRUM_IAM_ROLE_ARN`, `FULCRUM_IAM_ROLE_EXTERNAL_ID`). Base credentials are used only for
+  `sts:AssumeRole`; every AWS call and every MSK IAM token is signed with the role's auto-refreshing
+  temporary credentials. AssumeRole failures explain the trust-policy requirements.
+- `iam/fulcrum-role-trust-policy.json` and `iam/fulcrum-assume-role-policy.json` templates.
+- `/fulcrum status` shows the role, broker endpoint and connection mode.
+
+### Changed
+
+- MSK IAM tokens are now always signed from the same boto3 session as the AWS API calls.
+
 ## [0.1.0] - 2026-10-28
 
 ### Added
@@ -29,5 +49,6 @@ All notable changes to this plugin are documented here. The format follows
 - Least-privilege IAM policy, unit tests (moto, botocore Stubber, fake AdminClient) and an optional
   live integration test.
 
-[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.1.0...HEAD
+[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.2.0...HEAD
+[0.2.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.0
 [0.1.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.1.0

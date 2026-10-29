@@ -122,8 +122,9 @@ def test_missing_region(service_factory):
 def test_producers_reports_limitation_and_throughput(service_factory, session):
     svc = service_factory()
     kafka = session.stub("kafka")
+    expect_bootstrap(session)  # connect to the brokers
     kafka.add_response("describe_cluster_v2", describe_cluster_response(), ARN)
-    expect_bootstrap(session, 2)
+    expect_bootstrap(session)  # describe_cluster also lists endpoints
     session.stub("cloudwatch").add_response(
         "get_metric_data", {"MetricDataResults": [{"Id": "q0", "Values": [2048.0]}, {"Id": "q3", "Values": [4.0]}]}
     )
@@ -138,8 +139,9 @@ def test_producers_reports_limitation_and_throughput(service_factory, session):
 
 def test_producers_when_cloudwatch_denied(service_factory, session):
     svc = service_factory()
+    expect_bootstrap(session)
     session.stub("kafka").add_response("describe_cluster_v2", describe_cluster_response(serverless=True), ARN)
-    expect_bootstrap(session, 2)
+    expect_bootstrap(session)
     session.stub("cloudwatch").add_client_error("get_metric_data", "AccessDenied")
     out = svc.producers("orders", 15, None)
     assert "CloudWatch metrics unavailable" in out and "cloudwatch:GetMetricData" in out
@@ -280,7 +282,7 @@ def test_region_falls_back_to_profile_config(session, kafka_admin):
     svc = FulcrumService(
         make_settings(region=None, profile="saml"),
         session_factory=lambda **_kw: session,
-        admin_factory=lambda *a: kafka_admin,
+        admin_factory=lambda *a, **k: kafka_admin,
         clock=lambda: CLOCK,
     )
     session.stub("sts").add_response(

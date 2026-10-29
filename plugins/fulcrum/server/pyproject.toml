@@ -1,6 +1,6 @@
 [project]
 name = "fulcrum-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Read-only MCP server for Amazon MSK (Kafka) and AWS Glue Schema Registry, using IAM auth."
 license = "MIT"
 requires-python = ">=3.11"

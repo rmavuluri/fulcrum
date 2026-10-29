@@ -62,6 +62,7 @@ class KafkaAdmin:
         oauth_cb: Callable[[str | None], tuple[str, float]],
         timeout: float = 15.0,
         admin_factory: AdminFactory = AdminClient,
+        debug: bool = False,
     ) -> None:
         self.timeout = timeout
         self._config: dict[str, Any] = {
@@ -73,6 +74,12 @@ class KafkaAdmin:
             "socket.timeout.ms": int(timeout * 1000),
             "socket.connection.setup.timeout.ms": int(timeout * 1000),
             "log.connection.close": False,
+            # Unreachable brokers otherwise retry (and log) every ~100 ms for the life of the client.
+            "reconnect.backoff.ms": 1000,
+            "reconnect.backoff.max.ms": 30000,
+            # librdkafka logs straight to stderr; Fulcrum reports failures itself, so keep it quiet
+            # (critical only) unless FULCRUM_LOG_LEVEL=DEBUG.
+            "log_level": 7 if debug else 2,
         }
         self._factory = admin_factory
         self._client: Any = None

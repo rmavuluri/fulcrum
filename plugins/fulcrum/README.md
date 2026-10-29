@@ -30,6 +30,8 @@ Have these ready, or ask your AWS administrator or platform team:
 | You need | Example | Where to get it |
 |---|---|---|
 | The AWS account and region of your Kafka cluster | `123456789012`, `us-east-1` | Your platform team |
+| Your cluster's **ARN** *or* its **broker endpoint** | `arn:aws:kafka:...` or `b-1.mycluster...:9098` | Your platform team, or Step 3 |
+| The **IAM role ARN** to use, if your company uses a dedicated role for Kafka | `arn:aws:iam::123456789012:role/FulcrumReadOnly` | Your AWS admin (optional) |
 | A way to sign in to AWS | an SSO start URL, or access keys | Your platform team |
 | Read access to the cluster | the Fulcrum IAM policy attached to your user or role | Your AWS admin ([instructions for them](#for-aws-administrators-grant-access)) |
 | Network access to the cluster | VPN, bastion host, or a machine inside the VPC | Your network or platform team |
@@ -77,6 +79,14 @@ The keys are saved in `~/.aws/credentials` on your computer, not in Fulcrum.
 
 **Option C: Claude Code runs on an EC2 instance, ECS task or similar** that has an IAM role. Skip this step; the role is used automatically.
 
+**Using a dedicated IAM role for Kafka?** Many teams put the Kafka read permissions on a separate role (for example `arn:aws:iam::123456789012:role/FulcrumReadOnly`). First sign in with Option A, B or C, which gives you your *base* credentials. Then enter the role ARN in Step 6. Fulcrum uses your base credentials only to assume that role, and does everything else as the role. Check you're allowed to assume it:
+
+```bash
+aws sts assume-role --profile kafka-prod --role-arn arn:aws:iam::123456789012:role/FulcrumReadOnly \
+  --role-session-name test --query 'AssumedRoleUser.Arn' --output text
+# add --external-id <id> if your admin gave you one
+```
+
 **Check it worked**, using your profile name:
 
 ```bash
@@ -87,23 +97,28 @@ You should see your account number and an ARN. If you see an error, fix it befor
 
 > The `aws` CLI ([install guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)) is only needed for this setup and for checking your access. Fulcrum itself doesn't use it.
 
-### Step 3: Confirm you have read access
+### Step 3: Find your cluster's ARN or broker endpoint
 
-Your AWS identity needs the Fulcrum read-only permissions. Ask your admin to follow [For AWS administrators: grant access](#for-aws-administrators-grant-access). Then check:
+Fulcrum can find your cluster in either of two ways. Pick one:
+
+- **The cluster ARN** (`arn:aws:kafka:...`). Fulcrum looks up the broker endpoint itself. This is the easiest option and also enables `/fulcrum cluster` details and producer metrics.
+- **The broker endpoint** (`b-1.mycluster....kafka.us-east-1.amazonaws.com:9098,...`). Fulcrum connects to it directly. Use this if your platform team gave you the endpoint, or you aren't allowed to call the MSK API. You can also give both.
+
+Your AWS identity (or the role you'll assume) needs the Fulcrum read-only permissions. Ask your admin to follow [For AWS administrators: grant access](#for-aws-administrators-grant-access). Then check:
 
 ```bash
 aws kafka list-clusters-v2 --profile kafka-prod --region us-east-1 \
   --query 'ClusterInfoList[].[ClusterName,ClusterArn]' --output table
 ```
 
-You should see your cluster's name and ARN. **Copy the ARN** (it starts with `arn:aws:kafka:`); you'll need it in Step 6.
+You should see your cluster's name and ARN. **Copy the ARN** (it starts with `arn:aws:kafka:`); you'll need it in Step 6. If you only have a broker endpoint and this command is denied, that's fine: skip to Step 4.
 
 ### Step 4: Make sure your computer can reach the Kafka brokers
 
 Kafka brokers usually aren't on the public internet. Connect to your company **VPN** (or open your bastion tunnel) first. Then test it:
 
 ```bash
-# Find a broker address
+# Find a broker address (skip if your platform team already gave you the endpoint)
 aws kafka get-bootstrap-brokers --profile kafka-prod --cluster-arn <your-cluster-arn> \
   --query BootstrapBrokerStringSaslIam --output text
 #   → b-1.mycluster.abc123.c2.kafka.us-east-1.amazonaws.com:9098,b-2....
@@ -133,8 +148,11 @@ After the install, Claude Code shows a settings form. To open it again later, ru
 | Setting | What to enter | Example |
 |---|---|---|
 | **AWS profile** | The profile name from Step 2. Leave empty on EC2/ECS (Option C) | `kafka-prod` |
-| **AWS region** | Your cluster's region | `us-east-1` |
-| **MSK cluster ARN** | The ARN you copied in Step 3 | `arn:aws:kafka:us-east-1:123456789012:cluster/mycluster/abcd-1234-...` |
+| **IAM role ARN** | Only if you use a dedicated role (Step 2). Leave empty to use your credentials directly | `arn:aws:iam::123456789012:role/FulcrumReadOnly` |
+| **IAM role external ID** | Only if your admin gave you one for that role | `fulcrum-7f3a` |
+| **AWS region** | Your cluster's region. Can be left empty if your broker endpoint is an `amazonaws.com` address, because Fulcrum reads the region from it | `us-east-1` |
+| **MSK cluster ARN** | The ARN from Step 3 (one of these two is required) | `arn:aws:kafka:us-east-1:123456789012:cluster/mycluster/abcd-1234-...` |
+| **MSK bootstrap brokers** | The broker endpoint from Step 3/4 (one of these two is required) | `b-1.mycluster.abc123.c2.kafka.us-east-1.amazonaws.com:9098,b-2.mycluster.abc123.c2.kafka.us-east-1.amazonaws.com:9098` |
 | **Glue registry name** | Optional. Only if you want schema commands limited to one registry | `prod-schemas` |
 | **Lag threshold** | Optional. How much consumer lag counts as a problem in `/fulcrum health` | `1000` |
 | **Cache TTL** | Optional. Seconds to reuse results (0 = always fetch fresh data) | `30` |
@@ -161,12 +179,15 @@ All checks should say **ok**:
 | Kafka brokers (IAM) | ok     | 3 brokers reachable                           |
 ```
 
+With an IAM role, the first check is called **IAM role assumed** and shows the role's ARN. With a broker endpoint, the second check is called **Kafka endpoint**. Once **Kafka brokers (IAM)** says ok, you're authenticated and every Kafka command works.
+
 If a check fails, here is what to do:
 
 | Failed check | What it means | Fix |
 |---|---|---|
 | AWS region | No region set | Enter **AWS region** in Step 6 and restart |
 | AWS credentials | Not signed in, or your sign-in expired | Run `aws sso login --profile kafka-prod` (or redo Step 2), then retry |
+| IAM role assumed: *Access denied … sts:AssumeRole* | You may not assume the role, or the external ID is wrong | Check the **IAM role ARN** and **external ID**; ask your admin to allow you in the role's trust policy |
 | MSK / Kafka connectivity: *No MSK cluster selected* or *Not found* | The cluster ARN is missing or wrong, or you can't see the cluster | Check the **MSK cluster ARN** and region (Step 6); ask your admin about access (Step 3) |
 | MSK / Kafka connectivity: *Network unreachable* | No network path to the brokers | Connect the VPN, then retry (Step 4) |
 | MSK / Kafka connectivity: *Access denied … kafka-cluster:Connect* | Missing Kafka permissions | Ask your admin to attach the full Fulcrum policy |
@@ -230,9 +251,22 @@ Do this once for each person or team that will use Fulcrum.
    - **IAM role:** `aws iam attach-role-policy --role-name <role> --policy-arn arn:aws:iam::<account>:policy/FulcrumReadOnly`
    - **IAM user or group:** `aws iam attach-group-policy --group-name <group> --policy-arn arn:aws:iam::<account>:policy/FulcrumReadOnly`
 
+   - **A dedicated role that users assume** (they enter it as **IAM role ARN**):
+     1. Create the role with [`iam/fulcrum-role-trust-policy.json`](iam/fulcrum-role-trust-policy.json) as its trust policy. Set `USERS_ACCOUNT_ID` to the account your users sign in to, and either set `EXTERNAL_ID` or delete the whole `Condition` block if you don't use one:
+        ```bash
+        aws iam create-role --role-name FulcrumReadOnly \
+          --assume-role-policy-document file://fulcrum-role-trust-policy.json
+        aws iam attach-role-policy --role-name FulcrumReadOnly \
+          --policy-arn arn:aws:iam::<account>:policy/FulcrumReadOnly
+        ```
+     2. Let users assume it: give their identity (SSO permission set, user or group) the policy in [`iam/fulcrum-assume-role-policy.json`](iam/fulcrum-assume-role-policy.json), with `ROLE_ACCOUNT_ID` set.
+     3. Send users the role ARN, plus the external ID if you set one.
+
 4. **Check the cluster settings:**
    - **IAM role-based authentication** is enabled on the cluster (MSK console → cluster → Properties → Security settings).
    - The brokers' **security group** allows inbound TCP **9098** from users' network (VPN CIDR or bastion). Use **9198** if users connect through public access.
+
+5. **Send users** the cluster ARN, or the SASL/IAM bootstrap broker string (`aws kafka get-bootstrap-brokers --cluster-arn <arn>`).
 
 What each permission is for: see [IAM policy](#iam-policy). Every action is read-only.
 
@@ -249,7 +283,8 @@ What each permission is for: see [IAM policy](#iam-policy). Every action is read
                            └─ boto3 cloudwatch  → per-topic ingress (producer activity)
 ```
 
-- The MCP server runs on your machine and uses your AWS credentials from the standard credential chain.
+- The MCP server runs on your machine and uses your AWS credentials from the standard credential chain. If you set an IAM role, it assumes that role and works as the role from then on.
+- It connects to the brokers you configured, or looks them up from the cluster ARN with `kafka:GetBootstrapBrokers`.
 - Kafka calls go through a single `AdminClient` that is reused for the whole session. Its IAM tokens come from `aws-msk-iam-sasl-signer-python` and refresh automatically before they expire.
 - Calls are batched: one metadata request for all topics, one describe for all groups, and a single end-offset lookup for lag. Results are cached for a short time (30 s by default).
 
@@ -295,9 +330,12 @@ Set values in the plugin's options (`/plugin` → Installed → fulcrum → Conf
 
 | Option | Env var fallback | Default | Meaning |
 |---|---|---|---|
-| `aws_region` | `AWS_REGION`, `AWS_DEFAULT_REGION` | region in `MSK_CLUSTER_ARN` | Region of the cluster and registry |
-| `aws_profile` | `AWS_PROFILE` | default chain | Named profile from `~/.aws/config` |
-| `msk_cluster_arn` | `MSK_CLUSTER_ARN` | auto | Cluster to query. If unset and the region has exactly one cluster, Fulcrum uses it. Otherwise it lists the clusters and asks you to pick |
+| `aws_region` | `AWS_REGION`, `AWS_DEFAULT_REGION` | from the cluster ARN, the broker hostnames, or the profile | Region of the cluster and registry |
+| `aws_profile` | `AWS_PROFILE` | default chain | Named profile from `~/.aws/config` (the *base* credentials when a role is set) |
+| `iam_role_arn` | `FULCRUM_IAM_ROLE_ARN` | none | IAM role to assume for every AWS call and for Kafka IAM auth. Temporary credentials refresh automatically |
+| `iam_role_external_id` | `FULCRUM_IAM_ROLE_EXTERNAL_ID` | none | External ID required by the role's trust policy, if any |
+| `bootstrap_brokers` | `MSK_BOOTSTRAP_BROKERS` | none | SASL/IAM broker endpoints (`host:port,host:port`). When set, Fulcrum connects to them directly with no MSK API lookup, and the region is read from the hostnames |
+| `msk_cluster_arn` | `MSK_CLUSTER_ARN` | auto | Cluster to query. Optional when `bootstrap_brokers` is set; it then adds cluster state, version and CloudWatch metrics. If neither is set and the region has exactly one cluster, Fulcrum uses it; otherwise it lists the clusters and asks you to pick |
 | `glue_registry_name` | `GLUE_REGISTRY_NAME` | all registries | Limit schema commands to one registry |
 | `lag_threshold` | `FULCRUM_LAG_THRESHOLD` | `1000` | Total lag above which `health` flags a group |
 | `cache_ttl` | `FULCRUM_CACHE_TTL` | `30` | Seconds to reuse results. `0` disables the cache |
@@ -306,6 +344,16 @@ Set values in the plugin's options (`/plugin` → Installed → fulcrum → Conf
 | — | `FULCRUM_LOG_LEVEL` | `INFO` | Server log level. Logs go to stderr as JSON |
 
 To query a different cluster for one command, add `cluster=<arn>`, e.g. `/fulcrum topics cluster=arn:aws:kafka:...`.
+
+### What works in each connection mode
+
+| Command | Cluster ARN | Bootstrap brokers only | Brokers + ARN |
+|---|---|---|---|
+| `topics`, `topic`, `consumer-groups`, `consumer-group`, `consumers` | ✅ | ✅ | ✅ |
+| `health` | ✅ | ✅ (without MSK cluster state) | ✅ |
+| `cluster` | ✅ full MSK details | ✅ broker list and Kafka cluster id | ✅ full |
+| `producers` (CloudWatch ingress) | ✅ | ❌ needs the cluster name from the MSK API | ✅ |
+| `schemas`, `schema`, `schema-diff` | ✅ | ✅ | ✅ |
 
 ## IAM policy
 
@@ -334,6 +382,10 @@ The policy leaves out two actions on purpose:
 - `kafka-cluster:DescribeTransactionalId`: the current confluent-kafka Python client doesn't expose transaction APIs (see [Limitations](#limitations)).
 
 `sts:GetCallerIdentity`, which `status` uses to show which identity you're running as, needs no permission.
+
+**With bootstrap brokers only**, `kafka:ListClustersV2`, `kafka:DescribeClusterV2` and `kafka:GetBootstrapBrokers` aren't needed. The `kafka-cluster:*` actions (broker-side IAM auth) still are.
+
+**With an IAM role**, attach this policy to the role. Your base identity then needs only `sts:AssumeRole` on that role ([`iam/fulcrum-assume-role-policy.json`](iam/fulcrum-assume-role-policy.json)), and the role's trust policy must trust your base identity ([`iam/fulcrum-role-trust-policy.json`](iam/fulcrum-role-trust-policy.json)).
 
 ## Commands
 
@@ -680,7 +732,9 @@ Start with `/fulcrum status`. It shows the resolved config and checks credential
 | `AWS rejected the credentials` / SSO token errors | Expired session | `aws sso login --profile <name>` |
 | `Access denied … kafka-cluster:DescribeGroup` (or any action) | That IAM action is missing | Add the named action to your policy. See [IAM policy](#iam-policy) |
 | `Network unreachable … Timed out waiting for the Kafka brokers` | No route to the private brokers | Connect your VPN or bastion tunnel, or run inside the VPC. Check the security group allows 9098/9198 from you. `nc -vz <broker-host> 9098` should connect |
-| `No MSK cluster selected …` with a list | Several clusters in the region | Pass `cluster=<arn>`, or set `msk_cluster_arn` |
+| `No MSK cluster selected …` with a list | Several clusters in the region | Pass `cluster=<arn>`, or set `msk_cluster_arn` or `bootstrap_brokers` |
+| `Access denied … sts:AssumeRole` | Your base identity may not assume the role, the role's trust policy doesn't trust you, or the external ID doesn't match | Check `iam_role_arn` / `iam_role_external_id`. Test with `aws sts assume-role --role-arn <arn> --role-session-name test`. See the [admin steps](#for-aws-administrators-grant-access) |
+| `… is not a valid broker address` | Typo in `bootstrap_brokers` | Use `host:port` entries separated by commas, exactly as `aws kafka get-bootstrap-brokers` prints them |
 | `The cluster has no SASL/IAM bootstrap endpoint` | IAM auth isn't enabled on the cluster | Enable IAM role-based authentication on the cluster |
 | `No AWS region configured` | Region not set | Set `aws_region` or `AWS_REGION` |
 | `/fulcrum` not found | Another command already uses that name | Use `/fulcrum:fulcrum` |

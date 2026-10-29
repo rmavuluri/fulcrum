@@ -54,6 +54,10 @@ Fulcrum's MCP server (`mcp__plugin_fulcrum_msk__*`) has read-only access to Amaz
 - **Access denied:** the error names the missing IAM action. Point the user to `iam/fulcrum-readonly-policy.json` in the plugin.
 - **Read-only:** Fulcrum can't reset offsets, create or delete topics, change configs, or register schemas. If asked, say so. You may suggest the AWS or Kafka CLI command the user could run themselves, clearly labelled as something they run.
 
+## Connection modes
+
+Fulcrum connects either through a cluster ARN or straight to configured bootstrap brokers, optionally as an assumed IAM role. In broker-only mode, `get_cluster` returns broker data instead of MSK details, `cluster_health` omits the MSK cluster state, and `get_producer_activity` can't fetch CloudWatch metrics. If the user needs those, suggest setting the `msk_cluster_arn` option too.
+
 ## Multiple clusters
 
 If a tool returns a list of clusters and asks which to use, ask the user to pick. Then pass `cluster_arn` on later calls in this conversation.
