@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "fulcrum",
+  "displayName": "Fulcrum",
+  "version": "0.1.0",
+  "description": "Query Amazon MSK (Kafka) clusters and AWS Glue Schema Registry from Claude Code using IAM auth: topics, consumer groups and lag, consumers, schemas and diffs, cluster health. Read-only.",
+  "author": {
+    "name": "rmavuluri"
+  },
+  "homepage": "https://github.com/rmavuluri/fulcrum/tree/main/plugins/fulcrum",
+  "repository": "https://github.com/rmavuluri/fulcrum",
+  "license": "MIT",
+  "keywords": ["kafka", "msk", "aws", "glue", "schema-registry", "iam", "consumer-lag", "mcp"],
+  "userConfig": {
+    "aws_region": {
+      "type": "string",
+      "title": "AWS region",
+      "description": "Region of your MSK cluster and Glue registry, e.g. us-east-1. Leave empty to use AWS_REGION from your environment.",
+      "default": ""
+    },
+    "aws_profile": {
+      "type": "string",
+      "title": "AWS profile",
+      "description": "Named profile from ~/.aws/config (SSO profiles work). Leave empty to use AWS_PROFILE or the default credential chain. Fulcrum never stores credentials.",
+      "default": ""
+    },
+    "msk_cluster_arn": {
+      "type": "string",
+      "title": "MSK cluster ARN",
+      "description": "Cluster to query. Leave empty to use MSK_CLUSTER_ARN, or to auto-select when the region has exactly one cluster.",
+      "default": ""
+    },
+    "glue_registry_name": {
+      "type": "string",
+      "title": "Glue registry name",
+      "description": "Limit schema commands to one registry. Leave empty for all registries.",
+      "default": ""
+    },
+    "lag_threshold": {
+      "type": "number",
+      "title": "Lag threshold",
+      "description": "Total consumer-group lag above which /fulcrum health flags a group.",
+      "default": 1000,
+      "min": 0
+    },
+    "cache_ttl": {
+      "type": "number",
+      "title": "Cache TTL (seconds)",
+      "description": "How long to reuse results before fetching again. 0 disables caching.",
+      "default": 30,
+      "min": 0
+    }
+  }
+}

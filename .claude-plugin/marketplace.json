@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "fulcrum-marketplace",
+  "description": "Fulcrum: read-only Amazon MSK (Kafka) and AWS Glue Schema Registry insights for Claude Code.",
+  "owner": {
+    "name": "rmavuluri"
+  },
+  "plugins": [
+    {
+      "name": "fulcrum",
+      "source": "./plugins/fulcrum",
+      "description": "Query MSK topics, consumer groups and lag, consumers, Glue schemas and diffs, and cluster health with IAM auth. Read-only.",
+      "category": "cloud",
+      "tags": ["kafka", "msk", "aws", "glue", "schema-registry"]
+    }
+  ]
+}

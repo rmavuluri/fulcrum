@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "msk": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--quiet",
+        "--frozen",
+        "--no-dev",
+        "--project",
+        "${CLAUDE_PLUGIN_ROOT}/server",
+        "fulcrum-mcp"
+      ],
+      "env": {
+        "UV_PROJECT_ENVIRONMENT": "${CLAUDE_PLUGIN_DATA}/venv",
+        "FULCRUM_OPT_AWS_REGION": "${user_config.aws_region}",
+        "FULCRUM_OPT_AWS_PROFILE": "${user_config.aws_profile}",
+        "FULCRUM_OPT_MSK_CLUSTER_ARN": "${user_config.msk_cluster_arn}",
+        "FULCRUM_OPT_GLUE_REGISTRY_NAME": "${user_config.glue_registry_name}",
+        "FULCRUM_OPT_LAG_THRESHOLD": "${user_config.lag_threshold}",
+        "FULCRUM_OPT_CACHE_TTL": "${user_config.cache_ttl}"
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MskListClusters",
+      "Effect": "Allow",
+      "Action": ["kafka:ListClustersV2"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "MskDescribeClusterAndBrokers",
+      "Effect": "Allow",
+      "Action": ["kafka:DescribeClusterV2", "kafka:GetBootstrapBrokers"],
+      "Resource": "arn:aws:kafka:REGION:ACCOUNT_ID:cluster/CLUSTER_NAME/*"
+    },
+    {
+      "Sid": "KafkaConnectAndDescribeCluster",
+      "Effect": "Allow",
+      "Action": ["kafka-cluster:Connect", "kafka-cluster:DescribeCluster"],
+      "Resource": "arn:aws:kafka:REGION:ACCOUNT_ID:cluster/CLUSTER_NAME/*"
+    },
+    {
+      "Sid": "KafkaDescribeTopics",
+      "Effect": "Allow",
+      "Action": ["kafka-cluster:DescribeTopic", "kafka-cluster:DescribeTopicDynamicConfiguration"],
+      "Resource": "arn:aws:kafka:REGION:ACCOUNT_ID:topic/CLUSTER_NAME/*/*"
+    },
+    {
+      "Sid": "KafkaDescribeGroups",
+      "Effect": "Allow",
+      "Action": ["kafka-cluster:DescribeGroup"],
+      "Resource": "arn:aws:kafka:REGION:ACCOUNT_ID:group/CLUSTER_NAME/*/*"
+    },
+    {
+      "Sid": "GlueListRegistries",
+      "Effect": "Allow",
+      "Action": ["glue:ListRegistries"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "GlueReadSchemas",
+      "Effect": "Allow",
+      "Action": ["glue:ListSchemas", "glue:GetSchema", "glue:ListSchemaVersions", "glue:GetSchemaVersion"],
+      "Resource": [
+        "arn:aws:glue:REGION:ACCOUNT_ID:registry/*",
+        "arn:aws:glue:REGION:ACCOUNT_ID:schema/*/*"
+      ]
+    },
+    {
+      "Sid": "CloudWatchMskMetrics",
+      "Effect": "Allow",
+      "Action": ["cloudwatch:GetMetricData"],
+      "Resource": "*"
+    }
+  ]
+}
