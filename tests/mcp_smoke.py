@@ -1,6 +1,9 @@
 """Start the server exactly as Claude Code does (the command in .mcp.json) and list its tools.
 
-Usage: python tests/mcp_smoke.py   (CI runs this against the plugin's own uv.lock)
+Usage: python tests/mcp_smoke.py [command ...]
+
+With no arguments it runs the .mcp.json command (`uvx fulcrum-mcp==X`, from PyPI). The publish
+workflow passes `uvx --from dist/<wheel> fulcrum-mcp` to test the built package before uploading it.
 """
 
 import json
@@ -11,9 +14,15 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parents[1] / "plugins" / "fulcrum"
 
 
-def handshake(command: list[str]) -> tuple[dict, int]:
+def handshake(command: list[str], cwd: Path | None = None) -> tuple[dict, int]:
     proc = subprocess.Popen(
-        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, encoding="utf-8"
+        command,
+        cwd=cwd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        encoding="utf-8",
     )
     try:
 
@@ -49,6 +58,6 @@ def mcp_json_command() -> list[str]:
 
 
 if __name__ == "__main__":
-    info, count = handshake(mcp_json_command())
+    info, count = handshake(sys.argv[1:] or mcp_json_command())
     print(f"ok {info['name']} {info['version']}: {count} tools")
     sys.exit(0 if count else 1)

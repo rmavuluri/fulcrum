@@ -3,9 +3,20 @@
 All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/). The version in
-`.claude-plugin/plugin.json` and `pyproject.toml` must match the newest entry.
+`.claude-plugin/plugin.json` and `pyproject.toml` must match the newest entry. The MCP server is
+published separately to PyPI as `fulcrum-mcp`, and each plugin release pins one server version.
 
 ## [Unreleased]
+
+## [0.3.0] - 2026-10-29
+
+### Changed
+
+- The MCP server is now published to PyPI as [`fulcrum-mcp`](https://pypi.org/project/fulcrum-mcp/)
+  and the plugin starts it with `uvx fulcrum-mcp==0.3.0`. The plugin no longer contains Python
+  source; its `uv.lock` pins the server and every dependency with hashes. This is the form the
+  plugin directory can verify (Verified badge).
+- The server's environment now lives in uv's tool cache instead of the plugin folder.
 
 ## [0.2.3] - 2026-10-29
 
@@ -80,7 +91,8 @@ All notable changes to this plugin are documented here. The format follows
 - Least-privilege IAM policy, unit tests (moto, botocore Stubber, fake AdminClient) and an optional
   live integration test.
 
-[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.2.3...HEAD
+[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.3.0...HEAD
+[0.3.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.3.0
 [0.2.3]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.3
 [0.2.2]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.2
 [0.2.1]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.1

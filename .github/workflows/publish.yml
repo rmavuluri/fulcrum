@@ -1,0 +1,51 @@
+name: Publish to PyPI
+
+# Pushing a tag fulcrum-mcp-vX.Y.Z builds packages/fulcrum-mcp, checks that the built server starts,
+# and uploads it to https://pypi.org/project/fulcrum-mcp/ with trusted publishing (no API token).
+
+on:
+  push:
+    tags: ["fulcrum-mcp-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test the package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Tag matches the package version
+        run: |
+          version=$(uv run --no-project python -c "import tomllib; print(tomllib.load(open('packages/fulcrum-mcp/pyproject.toml', 'rb'))['project']['version'])")
+          test "${GITHUB_REF_NAME}" = "fulcrum-mcp-v${version}" || { echo "Tag ${GITHUB_REF_NAME} does not match version ${version}"; exit 1; }
+      - name: Tests
+        run: |
+          uv sync --frozen
+          uv run --frozen pytest -q --deselect tests/test_packaging.py::test_runtime_lock_is_next_to_mcp_json_and_pins_the_published_server
+      - name: Build
+        run: uv build packages/fulcrum-mcp --out-dir dist
+      - name: Built server starts and lists its tools
+        run: uv run --frozen python tests/mcp_smoke.py uvx --from "$(ls dist/*.whl)" fulcrum-mcp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Upload to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/fulcrum-mcp/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

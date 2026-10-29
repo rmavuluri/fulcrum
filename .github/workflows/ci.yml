@@ -26,14 +26,21 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --python ${{ matrix.python }}
       - name: Ruff lint
-        run: uv run --frozen ruff check plugins/fulcrum/src tests
+        run: uv run --frozen ruff check packages tests
       - name: Ruff format
-        run: uv run --frozen ruff format --check plugins/fulcrum/src tests
+        run: uv run --frozen ruff format --check packages tests
       - name: Tests (coverage gate 80%)
         run: uv run --frozen pytest --cov-report=xml
-      - name: Runtime lock is current
+      - name: Plugin lock is current
         run: uv lock --check --project plugins/fulcrum
-      - name: MCP server starts from the plugin's own lock (the .mcp.json command)
+      - name: Package builds and the built server starts
+        shell: bash
+        run: |
+          uv build packages/fulcrum-mcp --out-dir dist
+          uv run --frozen python tests/mcp_smoke.py uvx --from "$(ls dist/*.whl)" fulcrum-mcp
+        env:
+          UV_PYTHON: ${{ matrix.python }}
+      - name: Published server starts with the .mcp.json command
         run: uv run --frozen python tests/mcp_smoke.py
         env:
           UV_PYTHON: ${{ matrix.python }}

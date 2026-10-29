@@ -1,14 +1,7 @@
+# Pins the published fulcrum-mcp server (see .mcp.json) and, through uv.lock, every package it
+# depends on, with hashes. The server's source is in packages/fulcrum-mcp in the repository.
 [project]
-name = "fulcrum-mcp"
-version = "0.2.3"
-description = "Read-only MCP server for Amazon MSK (Kafka) and AWS Glue Schema Registry, using IAM auth."
-license = "MIT"
+name = "fulcrum-plugin"
+version = "0.3.0"
 requires-python = ">=3.11"
-dependencies = [
-    "mcp==2.3.0",
-    "boto3==1.43.121",
-    "confluent-kafka==2.16.1",
-    "aws-msk-iam-sasl-signer-python==1.0.2",
-    "pydantic==2.14.1",
-]
-
+dependencies = ["fulcrum-mcp==0.3.0"]

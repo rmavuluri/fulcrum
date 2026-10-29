@@ -1,16 +1,9 @@
 {
   "mcpServers": {
     "msk": {
-      "command": "uv",
+      "command": "uvx",
       "args": [
-        "run",
-        "--quiet",
-        "--frozen",
-        "--no-dev",
-        "--project",
-        "${CLAUDE_PLUGIN_ROOT}",
-        "python",
-        "${CLAUDE_PLUGIN_ROOT}/fulcrum_server.py"
+        "fulcrum-mcp==0.3.0"
       ],
       "env": {
         "FULCRUM_OPT_AWS_REGION": "${user_config.aws_region}",

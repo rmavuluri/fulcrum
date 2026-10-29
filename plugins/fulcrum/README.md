@@ -277,7 +277,7 @@ What each permission is for: see [IAM policy](#iam-policy). Every action is read
 /fulcrum <subcommand>  ──►  skill "fulcrum" (routes $ARGUMENTS)  ──┐
 "which group is lagging?" ─► skill "kafka-insights"  ──────────────┤
                                                                     ▼
-                         local MCP server "msk" (Python, uv) ── read-only tools
+                         local MCP server "msk" (fulcrum-mcp, via uvx) ── read-only tools
                            ├─ boto3 kafka       → cluster metadata, bootstrap brokers
                            ├─ confluent-kafka   → one long-lived AdminClient (SASL_SSL + OAUTHBEARER/IAM)
                            ├─ boto3 glue        → registries, schemas, versions
@@ -294,7 +294,7 @@ What each permission is for: see [IAM policy](#iam-policy). Every action is read
 | Requirement | Details |
 |---|---|
 | Claude Code | v2.1.281 or later. `claude --version` |
-| uv | [Install uv](https://docs.astral.sh/uv/getting-started/installation/). It downloads Python 3.12 and the pinned dependencies on first run, so you don't need a system Python |
+| uv | [Install uv](https://docs.astral.sh/uv/getting-started/installation/). It runs the server with `uvx` and downloads Python (3.11 or later) and the pinned dependencies on first run if needed, so you don't need a system Python |
 | AWS credentials | Any standard source: `AWS_PROFILE` (including SSO), environment variables, or an instance/task role |
 | IAM permissions | See [IAM policy](#iam-policy) |
 | Network access to the brokers | MSK brokers usually sit in a private VPC. The machine running Claude Code needs a path to them: VPN, SSH tunnel through a bastion, or Claude Code running inside the VPC (EC2, Cloud9, a dev container). The brokers' security group must allow TCP **9098** (IAM, private) or **9198** (IAM, public access) from you. The AWS API calls (MSK control plane, Glue, CloudWatch) only need normal internet access |
@@ -323,7 +323,7 @@ When you install from inside a session, Claude Code shows the [configuration](#c
 /fulcrum status
 ```
 
-The first start creates the Python environment in `~/.claude/plugins/data/fulcrum-fulcrum-marketplace/venv`, which takes about 10–30 s. Later starts take about a second. If `/mcp` shows the server timing out on the very first start, run `/mcp` → reconnect, or start Claude Code with `MCP_TIMEOUT=60000`.
+The first start downloads the [`fulcrum-mcp`](https://pypi.org/project/fulcrum-mcp/) server and its dependencies from PyPI into uv's cache, which takes about 10–30 s. Later starts take about a second. If `/mcp` shows the server timing out on the very first start, run `/mcp` → reconnect, or start Claude Code with `MCP_TIMEOUT=60000`.
 
 ## Configuration
 
@@ -749,7 +749,7 @@ Start with `/fulcrum status`. It shows the resolved config and checks credential
 - **Input validation.** Topic, group, schema, registry, prefix and ARN inputs are checked against strict patterns before they reach any API.
 - **Least privilege.** The bundled policy grants only the actions listed above, scoped to your cluster where AWS supports it.
 - **Runs locally.** Data goes from AWS to your machine and into your Claude Code session. Treat topic names, hosts and schema definitions accordingly.
-- **Pinned dependencies.** Every Python dependency is pinned in `uv.lock`, and the server runs with `uv run --frozen`.
+- **Pinned dependencies.** The plugin runs an exact server version (`uvx fulcrum-mcp==X.Y.Z`), the server pins its direct dependencies exactly, and the plugin's `uv.lock` records the server and every dependency with hashes. The server's source is in [`packages/fulcrum-mcp`](https://github.com/rmavuluri/fulcrum/tree/main/packages/fulcrum-mcp).
 
 ## Privacy
 
@@ -766,7 +766,7 @@ claude plugin validate .                      # validate the marketplace
 
 # from the repository root
 uv sync                                       # dev environment
-uv run ruff check plugins/fulcrum/src tests && uv run ruff format --check plugins/fulcrum/src tests
+uv run ruff check packages tests && uv run ruff format --check packages tests
 uv run pytest                                 # unit tests, coverage gate 80%
 
 # optional live test, against your real account and cluster
@@ -778,12 +778,14 @@ Layout:
 ```
 plugins/fulcrum/
 ├── .claude-plugin/plugin.json      manifest + userConfig
-├── .mcp.json                       starts the "msk" server with uv
+├── .mcp.json                       starts the "msk" server: uvx fulcrum-mcp==X.Y.Z
 ├── skills/fulcrum/SKILL.md         /fulcrum subcommand router
 ├── skills/kafka-insights/SKILL.md  natural-language guidance
 ├── iam/fulcrum-readonly-policy.json
-├── pyproject.toml, uv.lock        runtime dependencies (pinned, hashed)
-└── src/fulcrum_mcp/                Python MCP server
+└── pyproject.toml, uv.lock         pins fulcrum-mcp and all its dependencies (hashed)
+
+packages/fulcrum-mcp/               the MCP server, published to PyPI as fulcrum-mcp
+└── src/fulcrum_mcp/
 ```
 
 ## License

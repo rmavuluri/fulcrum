@@ -1,11 +1,11 @@
 # Development environment for the Fulcrum plugin: tests, lint and coverage.
-# The plugin's runtime project (what users install) is plugins/fulcrum/pyproject.toml.
+# The server package published to PyPI is packages/fulcrum-mcp; the plugin is plugins/fulcrum.
 [project]
 name = "fulcrum-dev"
 version = "0"
 requires-python = ">=3.11"
-# Same pins as plugins/fulcrum/pyproject.toml (tests/test_packaging.py keeps them in sync).
-# The plugin's code is put on sys.path by pytest (see pythonpath below) rather than installed
+# Same pins as packages/fulcrum-mcp/pyproject.toml (tests/test_packaging.py keeps them in sync).
+# The server's code is put on sys.path by pytest (see pythonpath below) rather than installed
 # through a [tool.uv.sources] path entry, which the plugin directory flags as a registry redirect.
 dependencies = [
     "mcp==2.3.0",
@@ -29,7 +29,7 @@ package = false
 [tool.ruff]
 line-length = 120
 target-version = "py311"
-src = ["plugins/fulcrum/src", "tests"]
+src = ["packages/fulcrum-mcp/src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "C4", "PL"]
@@ -43,7 +43,7 @@ known-first-party = ["fulcrum_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["plugins/fulcrum/src"]
+pythonpath = ["packages/fulcrum-mcp/src"]
 addopts = "-q --cov=fulcrum_mcp --cov-report=term-missing --cov-fail-under=80"
 markers = ["integration: runs against real AWS; needs FULCRUM_INTEGRATION=1 and credentials"]
 
