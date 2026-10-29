@@ -10,6 +10,8 @@ A Claude Code plugin marketplace with one plugin:
 /fulcrum help
 ```
 
+**New user?** Follow the [step-by-step Quick start](plugins/fulcrum/README.md#quick-start-step-by-step): it takes about 10 minutes and covers AWS sign-in, permissions, network access and settings. AWS admins: see [grant access](plugins/fulcrum/README.md#for-aws-administrators-grant-access).
+
 See the [plugin README](plugins/fulcrum/README.md) for prerequisites (uv, AWS credentials, network access to MSK), the least-privilege IAM policy, configuration, every command with sample output, troubleshooting and security notes.
 
 ## Repository layout

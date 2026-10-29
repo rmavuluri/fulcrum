@@ -4,6 +4,8 @@ Query **Amazon MSK (Kafka)** and the **AWS Glue Schema Registry** from inside Cl
 
 Fulcrum is **read-only**. No tool can create, alter or delete topics, groups, offsets, configs or schemas.
 
+- [Quick start (step by step)](#quick-start-step-by-step)
+- [For AWS administrators: grant access](#for-aws-administrators-grant-access)
 - [How it works](#how-it-works)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -14,6 +16,225 @@ Fulcrum is **read-only**. No tool can create, alter or delete topics, groups, of
 - [Troubleshooting](#troubleshooting)
 - [Security notes](#security-notes)
 - [Development](#development)
+
+## Quick start (step by step)
+
+Follow these steps once per computer, in order. They take about 10 minutes.
+
+> **You never give Fulcrum a password or secret key.** Fulcrum signs in to AWS with the same credentials your `aws` command-line tool already uses. If `aws` works on your computer, Fulcrum can too.
+
+### Before you start
+
+Have these ready, or ask your AWS administrator or platform team:
+
+| You need | Example | Where to get it |
+|---|---|---|
+| The AWS account and region of your Kafka cluster | `123456789012`, `us-east-1` | Your platform team |
+| A way to sign in to AWS | an SSO start URL, or access keys | Your platform team |
+| Read access to the cluster | the Fulcrum IAM policy attached to your user or role | Your AWS admin ([instructions for them](#for-aws-administrators-grant-access)) |
+| Network access to the cluster | VPN, bastion host, or a machine inside the VPC | Your network or platform team |
+
+### Step 1: Install uv
+
+Fulcrum's server is written in Python. `uv` downloads Python and everything else it needs automatically.
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# or on macOS: brew install uv
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Check it worked: `uv --version` prints a version number. Open a new terminal if it says "command not found".
+
+### Step 2: Sign in to AWS on your computer
+
+Pick the option that matches how your company gives you AWS access. If you're not sure, it's usually **Option A**.
+
+**Option A: AWS SSO / IAM Identity Center** (you sign in through a browser)
+
+```bash
+aws configure sso
+#   SSO start URL:   https://your-company.awsapps.com/start   (from your platform team)
+#   SSO region:      us-east-1
+#   pick the account and role that has Fulcrum access
+#   CLI profile name: kafka-prod        <- remember this name
+aws sso login --profile kafka-prod
+```
+
+**Option B: Access keys** (an access key ID and secret key from your admin)
+
+```bash
+aws configure --profile kafka-prod
+#   AWS Access Key ID:     AKIA...
+#   AWS Secret Access Key: ....
+#   Default region name:   us-east-1
+```
+
+The keys are saved in `~/.aws/credentials` on your computer, not in Fulcrum.
+
+**Option C: Claude Code runs on an EC2 instance, ECS task or similar** that has an IAM role. Skip this step; the role is used automatically.
+
+**Check it worked**, using your profile name:
+
+```bash
+aws sts get-caller-identity --profile kafka-prod
+```
+
+You should see your account number and an ARN. If you see an error, fix it before going on: Fulcrum uses exactly these credentials.
+
+> The `aws` CLI ([install guide](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)) is only needed for this setup and for checking your access. Fulcrum itself doesn't use it.
+
+### Step 3: Confirm you have read access
+
+Your AWS identity needs the Fulcrum read-only permissions. Ask your admin to follow [For AWS administrators: grant access](#for-aws-administrators-grant-access). Then check:
+
+```bash
+aws kafka list-clusters-v2 --profile kafka-prod --region us-east-1 \
+  --query 'ClusterInfoList[].[ClusterName,ClusterArn]' --output table
+```
+
+You should see your cluster's name and ARN. **Copy the ARN** (it starts with `arn:aws:kafka:`); you'll need it in Step 6.
+
+### Step 4: Make sure your computer can reach the Kafka brokers
+
+Kafka brokers usually aren't on the public internet. Connect to your company **VPN** (or open your bastion tunnel) first. Then test it:
+
+```bash
+# Find a broker address
+aws kafka get-bootstrap-brokers --profile kafka-prod --cluster-arn <your-cluster-arn> \
+  --query BootstrapBrokerStringSaslIam --output text
+#   → b-1.mycluster.abc123.c2.kafka.us-east-1.amazonaws.com:9098,b-2....
+
+# Test the connection to the first one (use only the host part before the colon)
+nc -vz b-1.mycluster.abc123.c2.kafka.us-east-1.amazonaws.com 9098
+# Windows: Test-NetConnection b-1.mycluster... -Port 9098
+```
+
+`succeeded` or `open` means you're good. A timeout means there's no network path: talk to your network or platform team (see [Troubleshooting](#troubleshooting)).
+
+If the first command prints `None`, IAM authentication isn't enabled on the cluster. Ask your admin to turn it on.
+
+### Step 5: Install the plugin
+
+In Claude Code, run:
+
+```
+/plugin marketplace add rmavuluri/fulcrum
+/plugin install fulcrum@fulcrum-marketplace
+```
+
+### Step 6: Fill in the settings
+
+After the install, Claude Code shows a settings form. To open it again later, run `/plugin`, choose **Installed → fulcrum → Configure**.
+
+| Setting | What to enter | Example |
+|---|---|---|
+| **AWS profile** | The profile name from Step 2. Leave empty on EC2/ECS (Option C) | `kafka-prod` |
+| **AWS region** | Your cluster's region | `us-east-1` |
+| **MSK cluster ARN** | The ARN you copied in Step 3 | `arn:aws:kafka:us-east-1:123456789012:cluster/mycluster/abcd-1234-...` |
+| **Glue registry name** | Optional. Only if you want schema commands limited to one registry | `prod-schemas` |
+| **Lag threshold** | Optional. How much consumer lag counts as a problem in `/fulcrum health` | `1000` |
+| **Cache TTL** | Optional. Seconds to reuse results (0 = always fetch fresh data) | `30` |
+
+Then **quit and restart Claude Code** so the settings take effect.
+
+The first start takes 10–30 seconds while Fulcrum sets up its Python environment. After that it starts in about a second.
+
+### Step 7: Check that everything works
+
+Run:
+
+```
+/fulcrum status
+```
+
+All checks should say **ok**:
+
+```
+| Check               | Result | Detail                                        |
+|---------------------|--------|-----------------------------------------------|
+| AWS credentials     | ok     | arn:aws:sts::123456789012:assumed-role/...    |
+| MSK cluster         | ok     | arn:aws:kafka:us-east-1:123456789012:cluster/ |
+| Kafka brokers (IAM) | ok     | 3 brokers reachable                           |
+```
+
+If a check fails, here is what to do:
+
+| Failed check | What it means | Fix |
+|---|---|---|
+| AWS region | No region set | Enter **AWS region** in Step 6 and restart |
+| AWS credentials | Not signed in, or your sign-in expired | Run `aws sso login --profile kafka-prod` (or redo Step 2), then retry |
+| MSK / Kafka connectivity: *No MSK cluster selected* or *Not found* | The cluster ARN is missing or wrong, or you can't see the cluster | Check the **MSK cluster ARN** and region (Step 6); ask your admin about access (Step 3) |
+| MSK / Kafka connectivity: *Network unreachable* | No network path to the brokers | Connect the VPN, then retry (Step 4) |
+| MSK / Kafka connectivity: *Access denied … kafka-cluster:Connect* | Missing Kafka permissions | Ask your admin to attach the full Fulcrum policy |
+
+### Step 8: Start using it
+
+Try these first:
+
+```
+/fulcrum cluster                   overview of your cluster
+/fulcrum topics                    all topics
+/fulcrum consumer-groups           all consumer groups
+/fulcrum health                    anything wrong? lagging consumers?
+/fulcrum help                      every command
+```
+
+Or just ask in plain English:
+
+- "Which consumer group is lagging the most?"
+- "Is the orders topic healthy?"
+- "Who is consuming the payments topic?"
+- "What changed between version 3 and 4 of the OrderCreated schema?"
+
+Tips:
+
+- **Big cluster?** Filter by name: `/fulcrum topics prefix=orders`, `/fulcrum consumer-groups prefix=billing`.
+- **Several clusters?** Add `cluster=<arn>` to any command to look at a different one.
+- **Long lists** show 100 rows at a time. The output tells you the next `offset=` to use.
+- If `/fulcrum` doesn't respond, type the full name: `/fulcrum:fulcrum`.
+
+### Day-to-day use
+
+- **SSO sessions expire**, typically after 8–12 hours. When Fulcrum says your credentials expired, run `aws sso login --profile kafka-prod`. You don't need to restart Claude Code.
+- **Connect the VPN** before using Kafka commands. Schema commands (`/fulcrum schemas`, `/fulcrum schema …`) and `/fulcrum cluster` work without it.
+- You only need to repeat the steps above on a new computer.
+
+## For AWS administrators: grant access
+
+Do this once for each person or team that will use Fulcrum.
+
+1. **Download** [`iam/fulcrum-readonly-policy.json`](iam/fulcrum-readonly-policy.json) and replace the placeholders:
+
+   | Placeholder | Replace with | Example |
+   |---|---|---|
+   | `REGION` | The cluster's region | `us-east-1` |
+   | `ACCOUNT_ID` | The 12-digit AWS account ID | `123456789012` |
+   | `CLUSTER_NAME` | The cluster name (the part after `cluster/` in its ARN) | `mycluster` |
+
+   To cover every cluster in the account, use `*` for `CLUSTER_NAME`.
+
+2. **Create the policy:**
+
+   ```bash
+   aws iam create-policy --policy-name FulcrumReadOnly \
+     --policy-document file://fulcrum-readonly-policy.json
+   ```
+
+3. **Attach it** to whatever your users sign in as:
+
+   - **IAM Identity Center (SSO):** add the policy JSON as an inline policy on the permission set the users choose (Permission sets → *set* → Inline policy), or attach `FulcrumReadOnly` as a customer managed policy.
+   - **IAM role:** `aws iam attach-role-policy --role-name <role> --policy-arn arn:aws:iam::<account>:policy/FulcrumReadOnly`
+   - **IAM user or group:** `aws iam attach-group-policy --group-name <group> --policy-arn arn:aws:iam::<account>:policy/FulcrumReadOnly`
+
+4. **Check the cluster settings:**
+   - **IAM role-based authentication** is enabled on the cluster (MSK console → cluster → Properties → Security settings).
+   - The brokers' **security group** allows inbound TCP **9098** from users' network (VPN CIDR or bastion). Use **9198** if users connect through public access.
+
+What each permission is for: see [IAM policy](#iam-policy). Every action is read-only.
 
 ## How it works
 
