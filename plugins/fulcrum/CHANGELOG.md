@@ -8,6 +8,13 @@ published separately to PyPI as `fulcrum-mcp`, and each plugin release pins one 
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-15
+
+### Changed
+
+- The plugin icon is now 512×512 (about 120 KB, down from 355 KiB), so it stays under the
+  plugin directory's 256 KiB limit for files it inspects. The server is still `fulcrum-mcp==0.3.0`.
+
 ## [0.3.0] - 2026-10-29
 
 ### Changed
@@ -91,7 +98,8 @@ published separately to PyPI as `fulcrum-mcp`, and each plugin release pins one 
 - Least-privilege IAM policy, unit tests (moto, botocore Stubber, fake AdminClient) and an optional
   live integration test.
 
-[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.3.0...HEAD
+[Unreleased]: https://github.com/rmavuluri/fulcrum/compare/fulcrum-v0.3.1...HEAD
+[0.3.1]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.3.1
 [0.3.0]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.3.0
 [0.2.3]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.3
 [0.2.2]: https://github.com/rmavuluri/fulcrum/releases/tag/fulcrum-v0.2.2

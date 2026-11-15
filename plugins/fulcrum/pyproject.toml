@@ -2,6 +2,6 @@
 # depends on, with hashes. The server's source is in packages/fulcrum-mcp in the repository.
 [project]
 name = "fulcrum-plugin"
-version = "0.3.0"
+version = "0.3.1"
 requires-python = ">=3.11"
 dependencies = ["fulcrum-mcp==0.3.0"]
